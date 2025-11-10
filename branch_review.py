@@ -64,18 +64,18 @@ def show_branch_changes(branch_name):
     # Show commit log for the branch
     print("\nCommits in this branch:")
     log_output = run_git_command(f"git log --oneline main..{branch_name}")
-    if log_output:
+    if log_output and len(log_output) > 0:
         print(log_output)
     else:
-        print("(No commits found)")
+        print("(No commits found for this branch.)")
 
     # Show diff
     print(f"\nDiff from main to {branch_name}:")
     diff_output = run_git_command(f"git diff main..{branch_name}")
-    if diff_output:
+    if diff_output and len(diff_output) > 0:
         print(diff_output)
     else:
-        print("(No changes found)")
+        print("(No changes found in this branch compared to main.)")
 
 
 def merge_branch(branch_name):
