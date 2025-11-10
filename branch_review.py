@@ -122,7 +122,7 @@ def reject_branch(branch_name):
 
 def main():
     """Main function for the branch review tool."""
-    print("🤖 Simple Agent - Branch Review Tool")
+    print("Simple Agent - Branch Review Tool")
     print("=" * 50)
 
     # Check if we're in a git repository
@@ -180,13 +180,13 @@ def main():
 
         if decision == '1':
             if merge_branch(selected_branch):
-                print("✅ Branch merged successfully!")
+                print("Branch merged successfully!")
             else:
-                print("❌ Merge failed")
+                print("Merge failed")
             break
         elif decision == '2':
             if reject_branch(selected_branch):
-                print("🗑️ Branch rejected and deleted")
+                print("Branch rejected and deleted")
             break
         elif decision == '3':
             # Show more details
