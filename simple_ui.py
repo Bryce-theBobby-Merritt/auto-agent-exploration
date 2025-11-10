@@ -6,7 +6,21 @@ Handles user input and displays agent responses with streaming.
 import asyncio
 from typing import Callable, Awaitable
 from agent import Agent, EventText, EventInputJson, EventToolUse, EventToolResult
-from tools import ToolRunCommandInDevContainer, ToolUpsertFile, ToolReadFile, ToolListDirectory, ToolSearchFiles, create_tool_interact_with_user, start_python_dev_container
+from tools import (
+    ToolRunCommandInDevContainer,
+    ToolUpsertFile,
+    ToolReadFile,
+    ToolListDirectory,
+    ToolSearchFiles,
+    ToolGitStatus,
+    ToolGitBranch,
+    ToolGitCreateBranch,
+    ToolGitAddFiles,
+    ToolGitCommit,
+    ToolGitPushBranch,
+    create_tool_interact_with_user,
+    start_python_dev_container
+)
 
 
 class SimpleUI:
@@ -35,12 +49,18 @@ class SimpleUI:
             ToolReadFile,
             ToolListDirectory,
             ToolSearchFiles,
+            ToolGitStatus,
+            ToolGitBranch,
+            ToolGitCreateBranch,
+            ToolGitAddFiles,
+            ToolGitCommit,
+            ToolGitPushBranch,
             create_tool_interact_with_user(self.prompt_user)
         ]
 
-        # System prompt for coding tasks
+        # System prompt for coding tasks with branch-based workflow
         system_prompt = """
-You are a helpful AI coding assistant that can execute code, create files, and read your own codebase to understand and extend your functionality.
+You are a helpful AI coding assistant that works within a containerized development environment with git branch management.
 
 You have access to tools that allow you to:
 1. Run commands in a Python development container (ToolRunCommandInDevContainer)
@@ -48,14 +68,29 @@ You have access to tools that allow you to:
 3. Read files from the host filesystem to understand your codebase (ToolReadFile)
 4. List directory contents on the host filesystem (ToolListDirectory)
 5. Search for text patterns across files in your codebase (ToolSearchFiles)
-6. Ask the user for clarification when needed
+6. Check git status (ToolGitStatus)
+7. View and manage git branches (ToolGitBranch)
+8. Create new feature branches (ToolGitCreateBranch)
+9. Stage files for commit (ToolGitAddFiles)
+10. Commit changes (ToolGitCommit)
+11. Push branches to remote (ToolGitPushBranch)
+12. Ask the user for clarification when needed
+
+BRANCH-BASED WORKFLOW:
+- For any coding task, create a new feature branch using ToolGitCreateBranch
+- Use descriptive branch names like "feature/add-user-auth" or "bugfix/fix-login-validation"
+- Make your changes and test them within the container
+- Stage and commit your changes with clear, descriptive commit messages
+- Push the branch when ready for host review
+- The host will review and merge approved branches manually
 
 IMPORTANT GUIDELINES:
 - Always use the tools to test and run code - do not just describe what code would do
-- When creating files, use relative paths from the container's /app directory
+- When creating files, use relative paths from the container's /app directory (which is mounted to the project root)
 - You can now read your own source code to understand your capabilities and plan extensions
 - Use ToolReadFile to examine your own code and understand how to modify yourself
 - Use ToolSearchFiles to find specific functions, classes, or patterns in the codebase
+- Always create feature branches for changes - never work directly on main
 - If a tool fails, analyze the error message and try a different approach
 - For complex tasks, break them down into smaller steps
 - Use simple, working code rather than complex solutions

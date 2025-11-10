@@ -140,6 +140,79 @@ Command attempted: {cmd}"""
         return await asyncio.to_thread(self._run)
 
 
+class ToolGitStatus(Tool):
+    """Check the current git status within the development container.
+
+    This shows staged, unstaged, and untracked files in the git repository.
+    """
+
+    async def __call__(self) -> str:
+        command = "git status --porcelain"
+        return await ToolRunCommandInDevContainer(command=command)()
+
+
+class ToolGitBranch(Tool):
+    """Show current branch and available branches in the git repository."""
+
+    async def __call__(self) -> str:
+        command = "git branch -a"
+        return await ToolRunCommandInDevContainer(command=command)()
+
+
+class ToolGitCreateBranch(Tool):
+    """Create a new git branch for feature development."""
+
+    branch_name: str = Field(description="Name of the new branch to create")
+
+    async def __call__(self) -> str:
+        # First check if branch already exists
+        check_command = f"git branch --list {self.branch_name}"
+        check_result = await ToolRunCommandInDevContainer(command=check_command)()
+
+        if self.branch_name in check_result:
+            return f"Branch '{self.branch_name}' already exists"
+
+        # Create and switch to the new branch
+        create_command = f"git checkout -b {self.branch_name}"
+        return await ToolRunCommandInDevContainer(command=create_command)()
+
+
+class ToolGitAddFiles(Tool):
+    """Add files to git staging area. Use '.' to add all files."""
+
+    files: str = Field(description="Files to add (use '.' for all files, or space-separated file names)")
+
+    async def __call__(self) -> str:
+        command = f"git add {self.files}"
+        return await ToolRunCommandInDevContainer(command=command)()
+
+
+class ToolGitCommit(Tool):
+    """Commit staged changes with a descriptive message."""
+
+    message: str = Field(description="Commit message describing the changes")
+
+    async def __call__(self) -> str:
+        command = f"git commit -m \"{self.message}\""
+        return await ToolRunCommandInDevContainer(command=command)()
+
+
+class ToolGitPushBranch(Tool):
+    """Push the current branch to remote repository."""
+
+    async def __call__(self) -> str:
+        # Get current branch name
+        branch_command = "git rev-parse --abbrev-ref HEAD"
+        branch_result = await ToolRunCommandInDevContainer(command=branch_command)()
+        branch_name = branch_result.strip()
+
+        if "fatal" in branch_result or not branch_name:
+            return f"Error getting current branch: {branch_result}"
+
+        command = f"git push -u origin {branch_name}"
+        return await ToolRunCommandInDevContainer(command=command)()
+
+
 class ToolReadFile(Tool):
     """Read a file from the host filesystem.
 
@@ -355,7 +428,7 @@ def check_container_status(container_name: str) -> str:
 
 
 def start_python_dev_container(container_name: str) -> bool:
-    """Start a Python development container. Returns True if successful."""
+    """Start a Python development container with project directory mounted. Returns True if successful."""
     if docker_client is None:
         print("Warning: Docker client not available. Cannot start container.")
         return False
@@ -370,22 +443,54 @@ def start_python_dev_container(container_name: str) -> bool:
         except docker_errors.NotFound:
             pass
 
-        # Create .scratchpad directory if it doesn't exist
-        scratchpad_dir = Path(".scratchpad")
-        scratchpad_dir.mkdir(exist_ok=True)
-        volume_path = str(scratchpad_dir.absolute())
+        # Get the project root directory (parent of current working directory)
+        project_root = Path.cwd()
+
+        # Ensure we're mounting the project directory
+        volumes = {
+            str(project_root): {"bind": "/app", "mode": "rw"}
+        }
+
+        # Use a custom image with git pre-installed, or build it if needed
+        image_name = "simple-agent-dev:latest"
+
+        try:
+            # Try to use existing image
+            docker_client.images.get(image_name)
+        except docker_errors.ImageNotFound:
+            # Build the image if it doesn't exist
+            dockerfile_content = """FROM python:3.12
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+CMD ["tail", "-f", "/dev/null"]
+"""
+            # Write Dockerfile temporarily
+            dockerfile_path = Path(".dockerfile_temp")
+            dockerfile_path.write_text(dockerfile_content)
+
+            try:
+                # Build the image
+                docker_client.images.build(
+                    path=".",
+                    dockerfile=str(dockerfile_path),
+                    tag=image_name,
+                    rm=True
+                )
+                print(f"[INFO] Built development container image: {image_name}")
+            finally:
+                # Clean up temp file
+                dockerfile_path.unlink(missing_ok=True)
 
         container = docker_client.containers.run(
-            "python:3.12",
+            image_name,
             detach=True,
             name=container_name,
             ports={"8888/tcp": 8888},
             tty=True,
             stdin_open=True,
             working_dir="/app",
-            command="bash -c 'mkdir -p /app && echo \"Container ready\" && tail -f /dev/null'",
-            # Remove volume mounting for now to simplify
-            # volumes={volume_path: {"bind": "/scratchpad", "mode": "rw"}}
+            volumes=volumes,
+            command="bash -c 'echo \"Container ready - project directory mounted at /app with git support\" && tail -f /dev/null'"
         )
 
         # Wait a moment for container to be ready

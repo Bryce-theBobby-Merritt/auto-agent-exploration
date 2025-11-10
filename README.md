@@ -13,12 +13,13 @@ A terminal-based AI agent that can perform complex coding tasks through iterativ
 
 ## 🏗️ Architecture
 
-The agent consists of four main components:
+The agent consists of five main components:
 
 - **`agent.py`**: Core Agent class with the agentic loop
-- **`tools.py`**: Tools for interacting with the Docker environment
+- **`tools.py`**: Tools for interacting with the Docker environment and git
 - **`clients.py`**: OpenAI and Docker client initialization
 - **`simple_ui.py`**: Terminal user interface
+- **`branch_review.py`**: Host tool for reviewing and merging agent-created branches
 
 ## 📋 Prerequisites
 
@@ -64,14 +65,36 @@ The agent will start a terminal interface where you can enter requests like:
 
 ## 🛠️ Available Tools
 
+### Development Container Tools
 ### ToolRunCommandInDevContainer
 Execute commands in a Python development container with:
 - Python 3.12 installed
+- Git support for version control
 - Port 8888 exposed for web servers
+- Project directory mounted at `/app`
 - Isolated execution environment
 
 ### ToolUpsertFile
 Create or update files in the development container.
+
+### Git Management Tools
+### ToolGitStatus
+Check current git status and see staged/unstaged changes.
+
+### ToolGitBranch
+View current branch and available branches.
+
+### ToolGitCreateBranch
+Create a new feature branch for development work.
+
+### ToolGitAddFiles
+Stage files for commit (use '.' for all files).
+
+### ToolGitCommit
+Commit staged changes with a descriptive message.
+
+### ToolGitPushBranch
+Push the current branch to remote repository.
 
 ### ToolInteractWithUser
 Ask the user for clarification or additional information.
@@ -84,9 +107,43 @@ Ask the user for clarification or additional information.
 
 ### Docker Container
 The agent automatically starts a `python-dev` container when initialized. This container:
-- Runs Python 3.12
+- Runs Python 3.12 with git support
 - Exposes port 8888 to the host
-- Has `/app` as the working directory
+- Mounts the project directory at `/app` for direct file access
+- Provides isolated development environment
+
+## 🌿 Branch-Based Development Workflow
+
+The agent follows a structured workflow to ensure safe, reviewable code changes:
+
+### Agent Workflow
+1. **Feature Branch Creation**: Agent creates a descriptive feature branch for each task
+2. **Code Development**: Agent makes changes and tests them within the container
+3. **Version Control**: Agent stages, commits, and pushes changes to the branch
+4. **Host Review**: Agent signals completion and waits for host approval
+
+### Host Review Process
+1. **Review Changes**: Use `python branch_review.py` to examine agent-created branches
+2. **Inspect Code**: Review diffs, commits, and changed files
+3. **Approve/Merge**: Merge approved branches into main branch
+4. **Reject/Delete**: Delete branches that don't meet requirements
+
+### Usage Example
+```bash
+# Agent creates a feature branch and makes changes
+# When complete, agent pushes the branch
+
+# Host reviews the changes
+python branch_review.py
+
+# Host can then merge or reject the branch
+```
+
+This workflow ensures:
+- **Isolation**: Each task gets its own branch
+- **Reviewability**: Host can inspect all changes before merging
+- **Safety**: Main branch remains stable
+- **Traceability**: Clear commit history for each feature
 
 ## 📝 Example Interactions
 
