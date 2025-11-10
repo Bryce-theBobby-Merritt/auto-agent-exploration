@@ -18,6 +18,8 @@ from tools import (
     ToolGitAddFiles,
     ToolGitCommit,
     ToolGitPushBranch,
+    ToolEditFile,
+    ToolSearchAndReplace,
     create_tool_interact_with_user,
     start_python_dev_container
 )
@@ -55,6 +57,8 @@ class SimpleUI:
             ToolGitAddFiles,
             ToolGitCommit,
             ToolGitPushBranch,
+            ToolEditFile,
+            ToolSearchAndReplace,
             create_tool_interact_with_user(self.prompt_user)
         ]
 

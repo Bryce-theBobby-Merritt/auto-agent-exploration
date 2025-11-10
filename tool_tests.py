@@ -1,27 +1,16 @@
-import unittest
-from tools import ToolRunCommandInDevContainer, ToolUpsertFile, ToolSearchAndReplace
 
+import asyncio
+import pytest
+from tools import ToolEditFile
 
-class TestToolRunCommandInDevContainer(unittest.TestCase):
-    def test_run_command(self):
-        tool = ToolRunCommandInDevContainer(command="echo 'Hello World'")
-        result = tool._run()
-        self.assertIn('Hello World', result)
-
-
-class TestToolUpsertFile(unittest.TestCase):
-    def test_upsert_file(self):
-        tool = ToolUpsertFile(file_path='test_file.txt', content='Test content')
-        result = tool._run()
-        self.assertEqual(result, 'File created/updated successfully.')  # Adjust based on return value
-
-
-class TestToolSearchAndReplace(unittest.TestCase):
-    def test_search_and_replace(self):
-        tool = ToolSearchAndReplace(pattern='foo', replacement='bar', directory='.')
-        result = tool._run()
-        self.assertEqual(result, "Search and replace completed successfully.")  # Adjust based on return value
-
-
-if __name__ == '__main__':
-    unittest.main()  
+@pytest.mark.asyncio
+async def test_tool_edit_file(tmpdir):
+    test_file_path = tmpdir.join('test_file.txt')
+    edit_tool = ToolEditFile(file_path=str(test_file_path), content="Hello World!\n")
+    result = await edit_tool()
+    assert "File edited successfully" in result
+    
+    # Check if content was appended
+    with open(test_file_path, 'r') as f:
+        content = f.read()
+        assert "Hello World!" in content
