@@ -744,10 +744,11 @@ class ToolSpawnSubagent(Tool):
     task: str = Field(description="The specific task for the subagent to complete")
 
     async def __call__(self) -> str:
-        """Spawn and run a subagent for the given task."""
+        """Spawn a subagent for the given task that runs in the background."""
         try:
             # Import here to avoid circular imports
             from agent import Agent
+            import asyncio
 
             # Create a focused system prompt for the subagent
             subagent_prompt = f"""You are a specialized subagent tasked with: {self.task}
@@ -764,7 +765,6 @@ Available tools include:
 Work step-by-step and use tools as needed to complete the task successfully."""
 
             # Create subagent with all available tools (same as main agent)
-            # We'll get the tools from the current context by importing what we need
             from simple_ui import (
                 ToolRunCommandInDevContainer,
                 ToolUpsertFile,
@@ -783,13 +783,13 @@ Work step-by-step and use tools as needed to complete the task successfully."""
                 ToolCurlCommand,
             )
 
-            # Create a simple user interaction tool for the subagent
-            def simple_prompter(query: str) -> str:
-                # For subagents, we'll handle user interaction differently
-                # Return a message indicating the subagent needs clarification
-                return f"[SUBAGENT NEEDS CLARIFICATION] {query}"
+            # Create a user interaction tool that forwards to main agent
+            def subagent_prompter(query: str) -> str:
+                # For now, return a message that will be handled by the main agent
+                # TODO: Implement proper inter-agent communication
+                return f"[SUBAGENT REQUESTS CLARIFICATION] {query}"
 
-            ToolInteractWithUser = create_tool_interact_with_user(simple_prompter)
+            ToolInteractWithUser = create_tool_interact_with_user(subagent_prompter)
 
             subagent_tools = [
                 ToolRunCommandInDevContainer,
@@ -813,7 +813,7 @@ Work step-by-step and use tools as needed to complete the task successfully."""
             # Create subagent instance
             subagent = Agent(
                 system_prompt=subagent_prompt,
-                model="gpt-4o-mini",  # Use same model as main agent
+                model="gpt-4o-mini",
                 tools=subagent_tools,
                 messages=[]
             )
@@ -821,22 +821,70 @@ Work step-by-step and use tools as needed to complete the task successfully."""
             # Add the task as a user message
             subagent.add_user_message(f"Please complete this task: {self.task}")
 
-            # Run the subagent and collect results
-            results = []
-            async for event in subagent.agentic_loop():
-                from agent import EventText, EventToolUse, EventToolResult
-                if isinstance(event, EventText):
-                    results.append(f"TEXT: {event.text}")
-                elif isinstance(event, EventToolUse):
-                    results.append(f"TOOL_USE: {event.tool.__class__.__name__}")
-                elif isinstance(event, EventToolResult):
-                    results.append(f"TOOL_RESULT: {event.result[:200]}{'...' if len(event.result) > 200 else ''}")
+            # Start the subagent in the background
+            async def run_subagent():
+                """Run the subagent and handle its events."""
+                try:
+                    text_buffer = ""
+                    async for event in subagent.agentic_loop():
+                        from agent import EventText, EventToolUse, EventToolResult
+                        if isinstance(event, EventText):
+                            text_buffer += event.text
+                            # Print complete lines or when buffer gets too large
+                            if '\n' in text_buffer or len(text_buffer) > 100:
+                                lines = text_buffer.split('\n')
+                                for line in lines[:-1]:  # Print complete lines
+                                    if line.strip():
+                                        try:
+                                            print(f"[SUBAGENT] {line}", flush=True)
+                                        except UnicodeEncodeError:
+                                            # Handle encoding issues by replacing problematic characters
+                                            safe_line = line.encode('ascii', 'replace').decode('ascii')
+                                            print(f"[SUBAGENT] {safe_line}", flush=True)
+                                text_buffer = lines[-1]  # Keep incomplete line
+                        elif isinstance(event, EventToolUse):
+                            # Flush any buffered text first
+                            if text_buffer.strip():
+                                try:
+                                    print(f"[SUBAGENT] {text_buffer}", flush=True)
+                                except UnicodeEncodeError:
+                                    safe_text = text_buffer.encode('ascii', 'replace').decode('ascii')
+                                    print(f"[SUBAGENT] {safe_text}", flush=True)
+                                text_buffer = ""
+                            print(f"[SUBAGENT TOOL] {event.tool.__class__.__name__}", flush=True)
+                        elif isinstance(event, EventToolResult):
+                            # Flush any buffered text first
+                            if text_buffer.strip():
+                                try:
+                                    print(f"[SUBAGENT] {text_buffer}", flush=True)
+                                except UnicodeEncodeError:
+                                    safe_text = text_buffer.encode('ascii', 'replace').decode('ascii')
+                                    print(f"[SUBAGENT] {safe_text}", flush=True)
+                                text_buffer = ""
+                            result_preview = event.result[:100] + "..." if len(event.result) > 100 else event.result
+                            try:
+                                print(f"[SUBAGENT RESULT] {result_preview}", flush=True)
+                            except UnicodeEncodeError:
+                                safe_result = result_preview.encode('ascii', 'replace').decode('ascii')
+                                print(f"[SUBAGENT RESULT] {safe_result}", flush=True)
 
-            # Return the subagent's work as a summary
-            if results:
-                return f"Subagent completed task. Summary:\n" + "\n".join(results[-10:])  # Last 10 events
-            else:
-                return "Subagent completed task but produced no output."
+                    # Flush any remaining buffered text
+                    if text_buffer.strip():
+                        try:
+                            print(f"[SUBAGENT] {text_buffer}", flush=True)
+                        except UnicodeEncodeError:
+                            safe_text = text_buffer.encode('ascii', 'replace').decode('ascii')
+                            print(f"[SUBAGENT] {safe_text}", flush=True)
+
+                    print("[SUBAGENT] Task completed successfully.", flush=True)
+                except Exception as e:
+                    print(f"[SUBAGENT ERROR] {str(e)}", flush=True)
+
+            # Create background task for subagent
+            asyncio.create_task(run_subagent())
+
+            # Return immediately so main thread isn't blocked
+            return f"Subagent started for task: {self.task[:100]}{'...' if len(self.task) > 100 else ''}. It will run in the background and output will be prefixed with [SUBAGENT]."
 
         except Exception as e:
             return f"Error spawning subagent: {str(e)}"
