@@ -8,6 +8,7 @@ from typing import Callable, Awaitable
 from agent import Agent, EventText, EventInputJson, EventToolUse, EventToolResult
 from tools import (
     ToolRunCommandInDevContainer,
+    ToolRunBackgroundCommand,
     ToolUpsertFile,
     ToolReadFile,
     ToolListDirectory,
@@ -49,6 +50,7 @@ class SimpleUI:
         # Create tools
         tools = [
             ToolRunCommandInDevContainer,
+            ToolRunBackgroundCommand,
             ToolUpsertFile,
             ToolReadFile,
             ToolListDirectory,
@@ -71,17 +73,20 @@ You are a helpful AI coding assistant that works within a containerized developm
 
 You have access to tools that allow you to:
 1. Run commands in a Python development container (ToolRunCommandInDevContainer)
-2. Create and update files in the container (ToolUpsertFile)
-3. Read files from the host filesystem to understand your codebase (ToolReadFile)
-4. List directory contents on the host filesystem (ToolListDirectory)
-5. Search for text patterns across files in your codebase (ToolSearchFiles)
-6. Check git status (ToolGitStatus)
-7. View and manage git branches (ToolGitBranch)
-8. Create new feature branches (ToolGitCreateBranch)
-9. Stage files for commit (ToolGitAddFiles)
-10. Commit changes (ToolGitCommit)
-11. Push branches to remote (ToolGitPushBranch)
-12. Ask the user for clarification when needed
+2. Run background commands in the container for long-running processes like servers (ToolRunBackgroundCommand)
+3. Create and update files in the container (ToolUpsertFile)
+4. Read files from the host filesystem to understand your codebase (ToolReadFile)
+5. List directory contents on the host filesystem (ToolListDirectory)
+6. Search for text patterns across files in your codebase (ToolSearchFiles)
+7. Check git status (ToolGitStatus)
+8. View and manage git branches (ToolGitBranch)
+9. Create new feature branches (ToolGitCreateBranch)
+10. Stage files for commit (ToolGitAddFiles)
+11. Commit changes (ToolGitCommit)
+12. Push branches to remote (ToolGitPushBranch)
+13. Ask the user for clarification when needed
+
+IMPORTANT: When running servers or other long-running processes, ALWAYS use ToolRunBackgroundCommand instead of ToolRunCommandInDevContainer to avoid blocking the agent thread.
 
 BRANCH-BASED WORKFLOW:
 - For any coding task, create a new feature branch using ToolGitCreateBranch
