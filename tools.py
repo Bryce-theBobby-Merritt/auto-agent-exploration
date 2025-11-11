@@ -51,6 +51,9 @@ class ToolRunCommandInDevContainer(Tool):
             return f"Error: Container 'python-dev' is not running (status: {container.status}). Please restart the agent."
 
         # Use bash -c to properly execute shell commands with operators
+        # Ensure command doesn't contain Windows-style paths that would fail in Linux container
+        if "\\" in self.command and ".exe" in self.command.lower():
+            return f"Error: Command contains Windows-style executable path which won't work in Linux container: {self.command}"
         exec_command = ["bash", "-c", self.command]
 
         try:
@@ -114,6 +117,10 @@ class ToolUpsertFile(Tool):
         import base64
         encoded_content = base64.b64encode(self.content.encode('utf-8')).decode('utf-8')
         cmd = f"python3 -c \"import base64, sys; content = base64.b64decode('{encoded_content}').decode('utf-8'); open('{self.file_path}', 'w').write(content)\""
+
+        # Validate that we're not using Windows paths in Linux container
+        if "\\" in cmd:
+            return f"Error: File path contains backslashes which are invalid in Linux container: {self.file_path}"
 
         try:
             # Execute the command
@@ -616,6 +623,10 @@ class ToolEditFile(Tool):
         import base64
         encoded_content = base64.b64encode(self.content.encode('utf-8')).decode('utf-8')
         cmd = f"python3 -c \"import base64; open('{self.file_path}', 'a').write(base64.b64decode('{encoded_content}').decode('utf-8'))\""
+
+        # Validate that we're not using Windows paths in Linux container
+        if "\\" in cmd:
+            return f"Error: File path contains backslashes which are invalid in Linux container: {self.file_path}"
 
         try:
             # Execute the command
