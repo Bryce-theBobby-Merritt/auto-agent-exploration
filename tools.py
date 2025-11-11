@@ -1043,10 +1043,12 @@ def docker_status_command(container: str = "python-dev") -> str:
 def implement_command(md_file):
     """
     Initialize implementation scaffolding from a markdown file.
-    Creates plan.md and implementation_details.md in the current directory.
+    Encourages LLM to break the implement task into the first most important task.
+    From the most important task, break it into plan.md individual steps.
+    Execute the steps, and update as needed. Add implementation_details.md to track the progress.
+    Ask the user for clarification if needed.
     """
-    from pathlib import Path
-
+    # Read source markdown and derive a prioritized, actionable plan.
     md_path = Path(md_file)
     if not md_path.exists():
         return f"Error: file not found: {md_path}"
@@ -1056,15 +1058,120 @@ def implement_command(md_file):
     except Exception as e:
         return f"Error reading {md_path.name}: {e}"
 
-    with open('plan.md', 'w', encoding='utf-8') as plan_file:
-        plan_file.write('## Implementation Plan\n')
-        plan_file.write(specifications)
+    # Extract the "most important task" heuristically:
+    # - Prefer the first markdown heading line
+    # - Fallback to the first non-empty line
+    most_important = None
+    for line in specifications.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("#"):
+            # Remove leading '#' and trim
+            most_important = stripped.lstrip("#").strip()
+            break
+        if most_important is None:
+            most_important = stripped
 
-    with open('implementation_details.md', 'w', encoding='utf-8') as details_file:
-        details_file.write('## Implementation Details\n')
-        details_file.write('Details of implementation...')
+    if not most_important:
+        most_important = "Implement requested changes"
 
-    return f"/implement initialized with {md_path.name}"
+    # Derive step list:
+    # - Prefer ordered list lines like "1. ..." or "- ..."/"* ..." as steps
+    steps: list[str] = []
+    for line in specifications.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("1.") or stripped.startswith("- ") or stripped.startswith("* "):
+            # Normalize bullets to plain text
+            if stripped[0].isdigit():
+                # Remove leading enumeration like "1. "
+                parts = stripped.split(".", 1)
+                step_text = parts[1].strip() if len(parts) > 1 else stripped
+            else:
+                step_text = stripped[2:].strip()
+            if step_text:
+                steps.append(step_text)
+
+    # Fallback to a minimal two-step plan if none detected
+    if not steps:
+        steps = [
+            f"Plan work for: {most_important}",
+            "Execute initial setup tasks (git add/commit or simple commands)",
+        ]
+
+    # Write plan.md with derived steps
+    plan_lines = ["## Implementation Plan", "", f"Most Important Task: {most_important}", "", "### Steps:"]
+    for idx, s in enumerate(steps, start=1):
+        plan_lines.append(f"{idx}. {s}")
+    plan_content = "\n".join(plan_lines) + "\n"
+    Path("plan.md").write_text(plan_content, encoding="utf-8")
+
+    # Execute simple, explicit steps and track progress in implementation_details.md.
+    # Supported executable step forms:
+    #   - run: <shell command>        -> executed inside python-dev container
+    #   - write:<path>|<content>      -> write content to a file on host
+    from datetime import datetime
+    results: list[str] = []
+    needs_clarification: list[str] = []
+
+    for idx, step in enumerate(steps, start=1):
+        step_header = f"Step {idx}: {step}"
+
+        # run: <command>
+        if step.lower().startswith("run:"):
+            command = step.split(":", 1)[1].strip()
+            # Execute inside dev container synchronously
+            try:
+                output = ToolRunCommandInDevContainer(command=command)._run()
+                results.append(f"{step_header}\nResult:\n{output.strip()}\n")
+            except Exception as e:
+                results.append(f"{step_header}\nError executing command: {e}\n")
+            continue
+
+        # write:<path>|<content>
+        if step.lower().startswith("write:"):
+            rest = step.split(":", 1)[1]
+            parts = rest.split("|", 1)
+            if len(parts) == 2:
+                target_path = parts[0].strip()
+                content = parts[1]
+                try:
+                    Path(target_path).write_text(content, encoding="utf-8")
+                    results.append(f"{step_header}\nResult: wrote file '{target_path}'\n")
+                except Exception as e:
+                    results.append(f"{step_header}\nError writing file '{target_path}': {e}\n")
+            else:
+                needs_clarification.append(step)
+            continue
+
+        # Unknown step form -> needs clarification
+        needs_clarification.append(step)
+
+    # Write implementation_details.md log
+    details_lines = [
+        "## Implementation Details",
+        f"Started: {datetime.utcnow().isoformat()}Z",
+        "",
+        "### Executed Steps",
+    ]
+    if results:
+        details_lines.extend(results)
+    else:
+        details_lines.append("No executable steps detected.\n")
+
+    if needs_clarification:
+        details_lines.append("### Needs Clarification")
+        for s in needs_clarification:
+            details_lines.append(f"- {s}")
+        details_lines.append("")
+        details_lines.append("Please clarify the steps above or reformat as 'run: <cmd>' or 'write:<path>|<content>'.")
+
+    Path("implementation_details.md").write_text("\n".join(details_lines) + "\n", encoding="utf-8")
+
+    # Return concise status
+    executed = len(results)
+    unclear = len(needs_clarification)
+    return f"/implement initialized from {md_path.name} — executed {executed} step(s), {unclear} need clarification"
 
 
 def handle_slash_command(command: str):
