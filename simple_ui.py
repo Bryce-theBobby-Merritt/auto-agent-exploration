@@ -42,11 +42,19 @@ class SimpleUI:
 
     def initialize_agent(self, model: str = "gpt-4o-mini"):
         """Initialize the agent with tools."""
-        # Start the Python dev container
-        container_started = start_python_dev_container("python-dev")
-        if not container_started:
-            print("[WARN] Docker container failed to start. Docker tools may not work.")
-            print("   Make sure Docker is running and you have the python:3.12 image.")
+        # Check Docker availability first
+        from tools import check_docker_availability
+        docker_available, docker_message = check_docker_availability()
+        if not docker_available:
+            print(f"[WARN] {docker_message}")
+            print("   Docker-based tools will not be available.")
+            print("   Please start Docker Desktop and restart the application.")
+        else:
+            # Start the Python dev container
+            container_started = start_python_dev_container("python-dev")
+            if not container_started:
+                print("[WARN] Docker container failed to start. Docker tools may not work.")
+                print("   Make sure Docker is running and you have the python:3.12 image.")
 
         # Create tools
         tools = [

@@ -456,6 +456,18 @@ def check_container_status(container_name: str) -> str:
         return f"Error checking container status: {e}"
 
 
+def check_docker_availability() -> tuple[bool, str]:
+    """Check if Docker is available and accessible. Returns (available, message)."""
+    if docker_client is None:
+        return False, "Docker client not initialized"
+
+    try:
+        docker_client.ping()
+        return True, "Docker is available"
+    except Exception as e:
+        return False, f"Docker not accessible: {e}"
+
+
 def start_python_dev_container(container_name: str) -> bool:
     """Start a Python development container with project directory mounted. Returns True if successful."""
     if docker_client is None:
@@ -534,8 +546,21 @@ CMD ["tail", "-f", "/dev/null"]
             print(f"[FAIL] Container '{container_name}' failed to start. Status: {container.status}")
             return False
 
+    except docker_errors.BuildError as e:
+        print(f"[ERROR] Docker build failed for '{container_name}': {e}")
+        print("This might be due to network issues or invalid Dockerfile.")
+        return False
+    except docker_errors.APIError as e:
+        print(f"[ERROR] Docker API error for '{container_name}': {e}")
+        print("Check Docker daemon status and permissions.")
+        return False
     except Exception as e:
-        print(f"[ERROR] Error starting container '{container_name}': {e}")
+        print(f"[ERROR] Unexpected error starting container '{container_name}': {e}")
+        print(f"Error type: {type(e).__name__}")
+        # Check for common path-related errors
+        if "executable" in str(e).lower() and ("python" in str(e).lower() or ".exe" in str(e).lower()):
+            print("[HINT] This appears to be a Python executable path issue.")
+            print("Ensure Docker is running and the python:3.12 image is available.")
         return False
 
 
