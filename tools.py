@@ -11,6 +11,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 from clients import docker_client
 import docker.errors as docker_errors
+import requests
 
 
 class Tool(BaseModel):
@@ -666,3 +667,176 @@ class WebSearchTool:
 
 # Registering WebSearchTool as a tool
 web_search_tool = WebSearchTool()
+
+
+class ToolCurlCommand(Tool):
+    """Execute curl commands for testing web APIs, downloading files, or making HTTP requests.
+
+    This tool allows you to run curl commands directly on the host system, making it useful for:
+    - Testing web APIs and endpoints (like the Flask app running in Docker)
+    - Downloading files from URLs
+    - Making various HTTP requests with custom headers, methods, and data
+    - Debugging network connectivity issues
+
+    Examples:
+    - curl -X GET "http://localhost:8889/search?query=test"
+    - curl -X POST -H "Content-Type: application/json" -d '{"key":"value"}' http://api.example.com/endpoint
+    - curl -I http://example.com (just headers)
+    - curl -L -o output.txt http://example.com/file.txt (download with redirects)
+    """
+
+    command: str = Field(description="The complete curl command to execute (without the 'curl' prefix)")
+
+    def _run(self) -> str:
+        """Execute the curl command and return the result."""
+        import subprocess
+
+        try:
+            # Build the full command
+            full_command = f"curl {self.command}"
+
+            # Execute the curl command
+            result = subprocess.run(
+                full_command,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=30  # 30 second timeout for network requests
+            )
+
+            # Format the output
+            output_lines = []
+
+            if result.returncode == 0:
+                output_lines.append("✅ Curl command executed successfully")
+            else:
+                output_lines.append(f"⚠️  Curl command failed with exit code {result.returncode}")
+
+            if result.stdout.strip():
+                output_lines.append("STDOUT:")
+                output_lines.append(result.stdout)
+
+            if result.stderr.strip():
+                output_lines.append("STDERR:")
+                output_lines.append(result.stderr)
+
+            return "\n".join(output_lines)
+
+        except subprocess.TimeoutExpired:
+            return "❌ Curl command timed out after 30 seconds"
+        except FileNotFoundError:
+            return "❌ curl command not found. Please ensure curl is installed on the system."
+        except Exception as e:
+            return f"❌ Error executing curl command: {str(e)}"
+
+    async def __call__(self) -> str:
+        return await asyncio.to_thread(self._run)
+
+
+class ToolSpawnSubagent(Tool):
+    """Spawn a subagent to handle a specific task independently.
+
+    This tool creates a separate agent instance with a focused prompt to complete
+    the specified task, keeping the main agent's context minimal by offloading
+    complex work to specialized subagents.
+    """
+
+    task: str = Field(description="The specific task for the subagent to complete")
+
+    async def __call__(self) -> str:
+        """Spawn and run a subagent for the given task."""
+        try:
+            # Import here to avoid circular imports
+            from agent import Agent
+
+            # Create a focused system prompt for the subagent
+            subagent_prompt = f"""You are a specialized subagent tasked with: {self.task}
+
+Complete this task efficiently using the available tools. Focus only on the assigned task and provide clear, actionable results.
+
+Available tools include:
+- File operations (read, write, edit files)
+- Directory listing and file search
+- Command execution in development container
+- Git operations (status, branch management, commits)
+- User interaction for clarification
+
+Work step-by-step and use tools as needed to complete the task successfully."""
+
+            # Create subagent with all available tools (same as main agent)
+            # We'll get the tools from the current context by importing what we need
+            from simple_ui import (
+                ToolRunCommandInDevContainer,
+                ToolUpsertFile,
+                ToolReadFile,
+                ToolListDirectory,
+                ToolSearchFiles,
+                ToolGitStatus,
+                ToolGitBranch,
+                ToolGitCreateBranch,
+                ToolGitAddFiles,
+                ToolGitCommit,
+                ToolGitPushBranch,
+                ToolEditFile,
+                ToolSearchAndReplace,
+                ToolTmuxCommand,
+                ToolCurlCommand,
+            )
+
+            # Create a simple user interaction tool for the subagent
+            def simple_prompter(query: str) -> str:
+                # For subagents, we'll handle user interaction differently
+                # Return a message indicating the subagent needs clarification
+                return f"[SUBAGENT NEEDS CLARIFICATION] {query}"
+
+            ToolInteractWithUser = create_tool_interact_with_user(simple_prompter)
+
+            subagent_tools = [
+                ToolRunCommandInDevContainer,
+                ToolUpsertFile,
+                ToolReadFile,
+                ToolListDirectory,
+                ToolSearchFiles,
+                ToolGitStatus,
+                ToolGitBranch,
+                ToolGitCreateBranch,
+                ToolGitAddFiles,
+                ToolGitCommit,
+                ToolGitPushBranch,
+                ToolEditFile,
+                ToolSearchAndReplace,
+                ToolTmuxCommand,
+                ToolCurlCommand,
+                ToolInteractWithUser
+            ]
+
+            # Create subagent instance
+            subagent = Agent(
+                system_prompt=subagent_prompt,
+                model="gpt-4o-mini",  # Use same model as main agent
+                tools=subagent_tools,
+                messages=[]
+            )
+
+            # Add the task as a user message
+            subagent.add_user_message(f"Please complete this task: {self.task}")
+
+            # Run the subagent and collect results
+            results = []
+            async for event in subagent.agentic_loop():
+                from agent import EventText, EventToolUse, EventToolResult
+                if isinstance(event, EventText):
+                    results.append(f"TEXT: {event.text}")
+                elif isinstance(event, EventToolUse):
+                    results.append(f"TOOL_USE: {event.tool.__class__.__name__}")
+                elif isinstance(event, EventToolResult):
+                    results.append(f"TOOL_RESULT: {event.result[:200]}{'...' if len(event.result) > 200 else ''}")
+
+            # Return the subagent's work as a summary
+            if results:
+                return f"Subagent completed task. Summary:\n" + "\n".join(results[-10:])  # Last 10 events
+            else:
+                return "Subagent completed task but produced no output."
+
+        except Exception as e:
+            return f"Error spawning subagent: {str(e)}"

@@ -13,13 +13,14 @@ A terminal-based AI agent that can perform complex coding tasks through iterativ
 
 ## 🏗️ Architecture
 
-The agent consists of five main components:
+The agent consists of six main components:
 
 - **`agent.py`**: Core Agent class with the agentic loop
 - **`tools.py`**: Tools for interacting with the Docker environment and git
 - **`clients.py`**: OpenAI and Docker client initialization
 - **`simple_ui.py`**: Terminal user interface
 - **`branch_review.py`**: Host tool for reviewing and merging agent-created branches
+- **`web_access_service/`**: Flask API service for web access tools (runs on port 8000)
 
 ## 📋 Prerequisites
 
@@ -52,10 +53,18 @@ The agent consists of five main components:
 
 ## 🚀 Usage
 
-Run the agent:
-```bash
-python main.py
-```
+1. (Optional) Start the web access service for web-related tools:
+   ```bash
+   cd web_access_service
+   pip install -r requirements.txt
+   python app.py
+   ```
+   This starts a Flask server on port 8000.
+
+2. Run the agent:
+   ```bash
+   python main.py
+   ```
 
 The agent will start a terminal interface where you can enter requests like:
 - "Create a simple Python script that prints 'Hello, World!'"
@@ -70,7 +79,8 @@ The agent will start a terminal interface where you can enter requests like:
 Execute commands in a Python development container with:
 - Python 3.12 installed
 - Git support for version control
-- Port 8888 exposed for web servers
+- Port 8888 exposed for development container web servers
+- Web access service on port 8000 for API endpoints
 - Project directory mounted at `/app`
 - Isolated execution environment
 

@@ -21,6 +21,8 @@ from tools import (
     ToolEditFile,
     ToolSearchAndReplace,
     ToolTmuxCommand,
+    ToolCurlCommand,
+    ToolSpawnSubagent,
     create_tool_interact_with_user,
     start_python_dev_container,
     configure_git
@@ -62,6 +64,8 @@ class SimpleUI:
             ToolEditFile,
             ToolSearchAndReplace,
             ToolTmuxCommand,
+            ToolCurlCommand,
+            ToolSpawnSubagent,
             create_tool_interact_with_user(self.prompt_user)
         ]
 
@@ -78,13 +82,15 @@ You have access to tools that allow you to:
 3. Read files from the host filesystem to understand your codebase (ToolReadFile)
 4. List directory contents on the host filesystem (ToolListDirectory)
 5. Search for text patterns across files in your codebase (ToolSearchFiles)
-6. Check git status (ToolGitStatus)
-7. View and manage git branches (ToolGitBranch)
-8. Create new feature branches (ToolGitCreateBranch)
-9. Stage files for commit (ToolGitAddFiles)
-10. Commit changes (ToolGitCommit)
-11. Push branches to remote (ToolGitPushBranch)
-12. Ask the user for clarification when needed
+6. Execute curl commands for testing APIs and making HTTP requests (ToolCurlCommand)
+7. Check git status (ToolGitStatus)
+8. View and manage git branches (ToolGitBranch)
+9. Create new feature branches (ToolGitCreateBranch)
+10. Stage files for commit (ToolGitAddFiles)
+11. Commit changes (ToolGitCommit)
+12. Push branches to remote (ToolGitPushBranch)
+13. Spawn subagents for complex tasks (ToolSpawnSubagent)
+14. Ask the user for clarification when needed
 
 BRANCH-BASED WORKFLOW:
 - For any coding task, create a new feature branch using ToolGitCreateBranch
@@ -105,6 +111,11 @@ IMPORTANT GUIDELINES:
   - To remove/modify existing tools: Use ToolSearchAndReplace to target specific content
   - NEVER use ToolUpsertFile on tools.py - it will overwrite everything!
   - ToolUpsertFile should only be used for creating brand new files
+- **SPAWN SUBAGENT USAGE:**
+  - Use ToolSpawnSubagent for complex, multi-step tasks that would clutter your main context
+  - Subagents work independently with their own focused prompt and can use all available tools
+  - Useful for: code refactoring, complex debugging, multi-file changes, research tasks
+  - Keep subagent tasks specific and focused for best results
 - Always create feature branches for changes - never work directly on main
 - If a tool fails, analyze the error message and try a different approach
 - For complex tasks, break them down into smaller steps
