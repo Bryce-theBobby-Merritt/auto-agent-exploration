@@ -181,7 +181,7 @@ Always be helpful and provide clear explanations of what you're doing.
                 print("\nInput stream ended. Goodbye!")
                 break
             except KeyboardInterrupt:
-                print("\nGoodbye!")
+                print("\nReceived interrupt signal. Shutting down gracefully...")
                 break
             except Exception as e:
                 print(f"Error: {e}")
