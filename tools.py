@@ -1005,7 +1005,7 @@ def update_issue(repo, issue_number, title=None, body=None, state=None):
         data['state'] = state
     response = requests.patch(url, json=data, headers=headers)
     return response.json()
-def create_pull_request(repo_name, title, body, head, base='main', reviewers=None):(repo_name, title, body, head, base='main'):
+def create_pull_request(repo_name, title, body, head, base='main', reviewers=None):
     import requests
     import os
 
@@ -1013,6 +1013,7 @@ def create_pull_request(repo_name, title, body, head, base='main', reviewers=Non
     token = os.getenv('GH_PAT')
     headers = {'Authorization': f'token {token}', 'Accept': 'application/vnd.github.v3+json'}
 
+    # Create the pull request
     url = f'https://api.github.com/repos/{repo_name}/pulls'
     data = {
         'title': title,
@@ -1020,9 +1021,20 @@ def create_pull_request(repo_name, title, body, head, base='main', reviewers=Non
         'head': head,
         'base': base
     }
+    pr_response = requests.post(url, json=data, headers=headers)
+    pr_json = pr_response.json()
 
-    response = requests.post(url, json=data, headers=headers)
-    return response.json()
+    # Optionally request reviewers (requires separate API call)
+    try:
+        if reviewers and isinstance(reviewers, (list, tuple)) and 'number' in pr_json:
+            pr_number = pr_json['number']
+            reviewers_url = f'https://api.github.com/repos/{repo_name}/pulls/{pr_number}/requested_reviewers'
+            requests.post(reviewers_url, json={'reviewers': list(reviewers)}, headers=headers)
+    except Exception:
+        # Ignore reviewer request errors to keep PR creation resilient
+        pass
+
+    return pr_json
 
 
 def list_repos(username):
@@ -1310,11 +1322,4 @@ def handle_slash_command(command: str):
         container = parts[1] if len(parts) > 1 else "python-dev"
         return docker_status_command(container)
 
-    return "Unknown command"    if reviewers:  # Include reviewers if provided
-        data['reviewers'] = reviewers
-        'base': base
-        'reviewers': reviewers
-    }
-    
-    response = requests.post(url, json=data, headers=headers)
-    return response.json()
+    return "Unknown command"
