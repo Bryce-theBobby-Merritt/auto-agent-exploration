@@ -17,3 +17,14 @@ class ToolTmuxCommand(Tool):
     
     async def __call__(self) -> str:
         return await asyncio.to_thread(self._run)
+# Set default Git configuration for commit author
+GIT_USER_NAME = 'BobbyBot'
+GIT_USER_EMAIL = 'bobbybot@example.com'
+
+# Function to configure Git user details
+async def configure_git():
+    await ToolRunCommandInDevContainer(command=f"git config --global user.name '{GIT_USER_NAME}'")()
+    await ToolRunCommandInDevContainer(command=f"git config --global user.email '{GIT_USER_EMAIL}'")()
+
+# Call configure_git function whenever needed.# Ensure Git configuration is set before any push or commit
+await configure_git()
