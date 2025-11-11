@@ -234,55 +234,6 @@ class ToolTmuxCommand(Tool):
         return await self._run()
 
 
-class ToolStartFlaskServer(Tool):
-    """Start a Flask server in a new tmux session to prevent thread locking the main agent.
-
-    This tool automatically starts Flask applications in detached tmux sessions,
-    allowing the agent to continue functioning while the server runs in the background.
-    """
-
-    app_file: str = Field(description="Path to the Flask app file (e.g., 'app.py')")
-    port: int = Field(default=5000, description="Port number for the Flask server")
-    host: str = Field(default="0.0.0.0", description="Host address for the Flask server")
-    session_name: str = Field(default="flask_server", description="Name for the tmux session")
-
-    async def _run(self) -> str:
-        # Check if tmux session with this name already exists
-        check_session_cmd = f"tmux has-session -t {self.session_name} 2>/dev/null && echo 'exists' || echo 'not_exists'"
-        session_check = await ToolRunCommandInDevContainer(command=check_session_cmd)()
-
-        if "exists" in session_check:
-            return f"Error: tmux session '{self.session_name}' already exists. Please choose a different session name or kill the existing session first."
-
-        # Create the Flask startup command
-        flask_command = f"cd /app && python {self.app_file}"
-
-        # Create tmux command to start Flask server in detached session
-        tmux_command = f"tmux new-session -d -s {self.session_name} '{flask_command}; exec bash'"
-
-        try:
-            # Execute the tmux command
-            result = await ToolRunCommandInDevContainer(command=tmux_command)()
-
-            if result.strip():
-                return f"Warning during tmux session creation: {result}\n\nFlask server should be starting in tmux session '{self.session_name}' on {self.host}:{self.port}"
-
-            # Verify the session was created
-            verify_cmd = f"tmux list-sessions | grep {self.session_name}"
-            verify_result = await ToolRunCommandInDevContainer(command=verify_cmd)()
-
-            if self.session_name in verify_result:
-                return f"✅ Flask server started successfully!\n\n- App file: {self.app_file}\n- Running on: {self.host}:{self.port}\n- tmux session: {self.session_name}\n- Access URL: http://localhost:{self.port}\n\nThe server is running in a detached tmux session and won't block the agent."
-            else:
-                return f"❌ Failed to verify tmux session creation. Server may not have started properly."
-
-        except Exception as e:
-            return f"Error starting Flask server: {e}\n\nCommand attempted: {tmux_command}"
-
-    async def __call__(self) -> str:
-        return await self._run()
-
-
 class ToolReadFile(Tool):
     """Read a file from the host filesystem.
 
@@ -603,17 +554,27 @@ class ToolSearchAndReplace(Tool):
             for root, _, files in os.walk(search_path):
                 for file in files:
                     file_path = Path(root) / file
-                    # Read file content
-                    with open(file_path, 'r') as f:
-                        content = f.read()
 
-                    # Replace content
-                    new_content = content.replace(self.pattern, self.replacement)
+                    # Skip files in __pycache__ directories and other binary files
+                    if '__pycache__' in str(file_path) or file_path.suffix in ['.pyc', '.pyo', '.pyd']:
+                        continue
 
-                    # If modified, write it back
-                    if content != new_content:
-                        with open(file_path, 'w') as f:
-                            f.write(new_content)
+                    try:
+                        # Read file content
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            content = f.read()
+
+                        # Replace content
+                        new_content = content.replace(self.pattern, self.replacement)
+
+                        # If modified, write it back
+                        if content != new_content:
+                            with open(file_path, 'w', encoding='utf-8') as f:
+                                f.write(new_content)
+
+                    except (UnicodeDecodeError, OSError):
+                        # Skip binary files or files that can't be read as UTF-8
+                        continue
 
             return "Search and replace completed successfully."
         except Exception as e:
@@ -685,3 +646,23 @@ async def configure_git():
     await ToolRunCommandInDevContainer(command=f"git config --global user.email '{GIT_USER_EMAIL}'")()
 
 # Git configuration will be set when needed during tool usage
+
+
+class WebSearchTool:
+    """Web search tool for finding information online."""
+
+    def __init__(self):
+        pass
+
+    def search(self, query):
+        import requests
+        response = requests.get(f'https://api.example.com/search?q={query}')
+        return response.json()
+
+    def open_url(self, url):
+        response = requests.get(url)
+        return {'data': response.text}
+
+
+# Registering WebSearchTool as a tool
+web_search_tool = WebSearchTool()
