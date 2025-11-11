@@ -25,7 +25,8 @@ from tools import (
     ToolSpawnSubagent,
     create_tool_interact_with_user,
     start_python_dev_container,
-    configure_git
+    configure_git,
+    handle_slash_command
 )
 
 
@@ -196,6 +197,17 @@ Always be helpful and provide clear explanations of what you're doing.
                 if user_input.lower() in ['quit', 'exit', 'q']:
                     print("Goodbye!")
                     break
+
+                # Handle slash commands directly without invoking the LLM
+                if user_input.startswith('/'):
+                    from tools import list_slash_commands
+                    result = handle_slash_command(user_input)
+                    # For help, show full command list
+                    if user_input.strip() in ['/help', '/commands']:
+                        print(result)
+                    else:
+                        print(f"[COMMAND] {result}")
+                    continue
 
                 if user_input.lower() in ['status', 'docker status', 'check docker']:
                     from tools import check_container_status

@@ -1029,11 +1029,15 @@ def test_github_authentication():
         return 'Authentication failed!', response.status_code, response.json()
 
 def list_slash_commands():
-    return "/implement <markdown_file>\n/about\n/help"
+    return "/implement <markdown_file>\n/about\n/help\n/status [container]\n/docker [container]"
 
 
 def about_command():
     return "Simple Agent tools module. Use /help to see available commands."
+
+
+def docker_status_command(container: str = "python-dev") -> str:
+    return check_container_status(container)
 
 
 def implement_command(md_file):
@@ -1087,5 +1091,9 @@ def handle_slash_command(command: str):
 
     if name == "/about":
         return about_command()
+
+    if name in ("/status", "/docker"):
+        container = parts[1] if len(parts) > 1 else "python-dev"
+        return docker_status_command(container)
 
     return "Unknown command"
