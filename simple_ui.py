@@ -20,8 +20,10 @@ from tools import (
     ToolGitPushBranch,
     ToolEditFile,
     ToolSearchAndReplace,
+    ToolTmuxCommand,
     create_tool_interact_with_user,
-    start_python_dev_container
+    start_python_dev_container,
+    configure_git
 )
 
 
@@ -59,6 +61,7 @@ class SimpleUI:
             ToolGitPushBranch,
             ToolEditFile,
             ToolSearchAndReplace,
+            ToolTmuxCommand,
             create_tool_interact_with_user(self.prompt_user)
         ]
 
