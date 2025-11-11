@@ -470,18 +470,25 @@ def check_docker_availability() -> tuple[bool, str]:
 
 def start_python_dev_container(container_name: str) -> bool:
     """Start a Python development container with project directory mounted. Returns True if successful."""
+    print(f"[DEBUG] Starting container '{container_name}'...")
+
     if docker_client is None:
         print("Warning: Docker client not available. Cannot start container.")
         return False
 
     try:
+        print(f"[DEBUG] Checking for existing container '{container_name}'...")
         # Check if container exists and clean it up
         try:
             existing_container = docker_client.containers.get(container_name)
+            print(f"[DEBUG] Found existing container with status: {existing_container.status}")
             if existing_container.status == "running":
+                print(f"[DEBUG] Killing existing container...")
                 existing_container.kill()
+            print(f"[DEBUG] Removing existing container...")
             existing_container.remove()
         except docker_errors.NotFound:
+            print(f"[DEBUG] No existing container '{container_name}' found")
             pass
 
         # Get the project root directory (parent of current working directory)
@@ -494,11 +501,14 @@ def start_python_dev_container(container_name: str) -> bool:
 
         # Use a custom image with git pre-installed, or build it if needed
         image_name = "simple-agent-dev:latest"
+        print(f"[DEBUG] Checking for image '{image_name}'...")
 
         try:
             # Try to use existing image
             docker_client.images.get(image_name)
+            print(f"[DEBUG] Found existing image '{image_name}'")
         except docker_errors.ImageNotFound:
+            print(f"[DEBUG] Image '{image_name}' not found, building it...")
             # Build the image if it doesn't exist
             dockerfile_content = """FROM python:3.12
 RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
@@ -522,6 +532,7 @@ CMD ["tail", "-f", "/dev/null"]
                 # Clean up temp file
                 dockerfile_path.unlink(missing_ok=True)
 
+        print(f"[DEBUG] Creating container '{container_name}'...")
         container = docker_client.containers.run(
             image_name,
             detach=True,
@@ -533,14 +544,18 @@ CMD ["tail", "-f", "/dev/null"]
             volumes=volumes,
             command="bash -c 'echo \"Container ready - project directory mounted at /app with git support\" && tail -f /dev/null'"
         )
+        print(f"[DEBUG] Container created with ID: {container.id}")
 
         # Wait a moment for container to be ready
+        print(f"[DEBUG] Waiting for container to be ready...")
         import time
         time.sleep(2)
 
         # Verify container is running
         container.reload()
+        print(f"[DEBUG] Container status after reload: {container.status}")
         if container.status == "running":
+            print(f"[DEBUG] Container '{container_name}' started successfully")
             return True
         else:
             print(f"[FAIL] Container '{container_name}' failed to start. Status: {container.status}")
