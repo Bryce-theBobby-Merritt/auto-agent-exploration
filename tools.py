@@ -939,3 +939,161 @@ Work step-by-step and use tools as needed to complete the task successfully."""
 
         except Exception as e:
             return f"Error spawning subagent: {str(e)}"
+def create_pr(repo, title, body='', head='', base='main'):
+    import requests
+    url = f'https://api.github.com/repos/{repo}/pulls'
+    headers = {'Authorization': f'token YOUR_ACTUAL_GITHUB_TOKEN'}
+    data = {'title': title, 'body': body, 'head': head, 'base': base}
+    response = requests.post(url, json=data, headers=headers)
+    return response.json()
+
+
+def list_issues(repo):
+    import requests
+    url = f'https://api.github.com/repos/{repo}/issues'
+    headers = {'Authorization': f'token YOUR_ACTUAL_GITHUB_TOKEN'}
+    response = requests.get(url, headers=headers)
+    return response.json()
+
+
+def create_issue(repo, title, body='', labels=[]):
+    import requests
+    url = f'https://api.github.com/repos/{repo}/issues'
+    headers = {'Authorization': f'token YOUR_ACTUAL_GITHUB_TOKEN'}
+    data = {'title': title, 'body': body, 'labels': labels}
+    response = requests.post(url, json=data, headers=headers)
+    return response.json()
+
+
+def update_issue(repo, issue_number, title=None, body=None, state=None):
+    import requests
+    url = f'https://api.github.com/repos/{repo}/issues/{issue_number}'
+    headers = {'Authorization': f'token YOUR_ACTUAL_GITHUB_TOKEN'}
+    data = {}
+    if title:
+        data['title'] = title
+    if body:
+        data['body'] = body
+    if state:
+        data['state'] = state
+    response = requests.patch(url, json=data, headers=headers)
+    return response.json()
+def create_pull_request(repo_name, title, body, head, base='main'):
+    import requests
+    import os
+
+    # GitHub personal access token
+    token = os.getenv('GH_PAT')
+    headers = {'Authorization': f'token {token}', 'Accept': 'application/vnd.github.v3+json'}
+
+    url = f'https://api.github.com/repos/{repo_name}/pulls'
+    data = {
+        'title': title,
+        'body': body,
+        'head': head,
+        'base': base
+    }
+
+    response = requests.post(url, json=data, headers=headers)
+    return response.json()
+
+
+def list_repos(username):
+    import requests
+    import os
+
+    # GitHub personal access token
+    token = os.getenv('GH_PAT')
+    headers = {'Authorization': f'token {token}', 'Accept': 'application/vnd.github.v3+json'}
+
+    url = f'https://api.github.com/users/{username}/repos'
+    response = requests.get(url, headers=headers)
+    return response.json()
+
+
+def test_github_authentication():
+    import os
+    import requests
+
+    # GitHub personal access token
+    token = os.getenv('GH_PAT')
+    headers = {'Authorization': f'token {token}', 'Accept': 'application/vnd.github.v3+json'}
+
+    # Simple request to check authentication
+    url = 'https://api.github.com/user'
+    response = requests.get(url, headers=headers)
+
+    if response.status_code == 200:
+        return 'Authentication successful!', response.json()
+    else:
+        return 'Authentication failed!', response.status_code, response.json()
+
+def list_slash_commands():
+    return "/implement <markdown_file>\n/about\n/help\n/status [container]\n/docker [container]"
+
+
+def about_command():
+    return "Simple Agent tools module. Use /help to see available commands."
+
+
+def docker_status_command(container: str = "python-dev") -> str:
+    return check_container_status(container)
+
+
+def implement_command(md_file):
+    """
+    Initialize implementation scaffolding from a markdown file.
+    Creates plan.md and implementation_details.md in the current directory.
+    """
+    from pathlib import Path
+
+    md_path = Path(md_file)
+    if not md_path.exists():
+        return f"Error: file not found: {md_path}"
+
+    try:
+        specifications = md_path.read_text(encoding="utf-8")
+    except Exception as e:
+        return f"Error reading {md_path.name}: {e}"
+
+    with open('plan.md', 'w', encoding='utf-8') as plan_file:
+        plan_file.write('## Implementation Plan\n')
+        plan_file.write(specifications)
+
+    with open('implementation_details.md', 'w', encoding='utf-8') as details_file:
+        details_file.write('## Implementation Details\n')
+        details_file.write('Details of implementation...')
+
+    return f"/implement initialized with {md_path.name}"
+
+
+def handle_slash_command(command: str):
+    """
+    Route a slash command string.
+    Supported:
+      - /implement <markdown_file>
+      - /about
+      - /help
+    """
+    if not command:
+        return "Unknown command"
+
+    parts = command.strip().split(maxsplit=1)
+    name = parts[0]
+
+    if name == "/implement":
+        if len(parts) < 2:
+            return "Usage: /implement <markdown_file>"
+        return implement_command(parts[1])
+
+    if name in ("/help", "/commands"):
+        return list_slash_commands()
+
+    if name == "/about":
+        return about_command()
+
+    if name in ("/status", "/docker"):
+        container = parts[1] if len(parts) > 1 else "python-dev"
+        return docker_status_command(container)
+
+    return "Unknown command"

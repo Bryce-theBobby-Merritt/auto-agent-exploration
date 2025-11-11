@@ -231,3 +231,38 @@ This project is open source. Feel free to use and modify it for your own purpose
 ## 🙏 Acknowledgments
 
 Inspired by the tutorial "Creating your own agentic loop from scratch" and advanced AI agents like Manus. Built with OpenAI's GPT models and Docker for safe code execution.
+# Project Documentation
+
+## GitHub Tools
+
+### Introduction
+This project includes GitHub Tools that enable streamlined interactions with GitHub for repository management, including creating pull requests and managing issues.
+
+### Features
+- Create Pull Requests
+- List Issues
+- Create and Update Issues
+
+### API Usage
+
+1. **Creating a Pull Request**
+   ```python
+   create_pr('user/repo', 'title of the PR', 'description of the PR', 'branch_to_merge', 'base_branch')
+   ```
+
+2. **Listing Issues**
+   ```python
+   list_issues('user/repo')
+   ```
+
+3. **Creating an Issue**
+   ```python
+   create_issue('user/repo', 'Issue Title', 'Description of the issue', ['bug', 'enhancement'])
+   ```
+
+4. **Updating an Issue**
+   ```python
+   update_issue('user/repo', issue_number, title='New Title')
+   ```
+
+This functionality allows the coding agent to automate its interactions with GitHub, improving efficiency and workflow.
