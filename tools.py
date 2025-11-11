@@ -939,3 +939,73 @@ Work step-by-step and use tools as needed to complete the task successfully."""
 
         except Exception as e:
             return f"Error spawning subagent: {str(e)}"
+def create_pr(repo, title, body='', head='', base='main'):
+    import requests
+    url = f'https://api.github.com/repos/{repo}/pulls'
+    headers = {'Authorization': f'token YOUR_GITHUB_TOKEN'}
+    data = {'title': title, 'body': body, 'head': head, 'base': base}
+    response = requests.post(url, json=data, headers=headers)
+    return response.json()
+
+
+def list_issues(repo):
+    import requests
+    url = f'https://api.github.com/repos/{repo}/issues'
+    headers = {'Authorization': f'token YOUR_GITHUB_TOKEN'}
+    response = requests.get(url, headers=headers)
+    return response.json()
+
+
+def create_issue(repo, title, body='', labels=[]):
+    import requests
+    url = f'https://api.github.com/repos/{repo}/issues'
+    headers = {'Authorization': f'token YOUR_GITHUB_TOKEN'}
+    data = {'title': title, 'body': body, 'labels': labels}
+    response = requests.post(url, json=data, headers=headers)
+    return response.json()
+
+
+def update_issue(repo, issue_number, title=None, body=None, state=None):
+    import requests
+    url = f'https://api.github.com/repos/{repo}/issues/{issue_number}'
+    headers = {'Authorization': f'token YOUR_GITHUB_TOKEN'}
+    data = {}
+    if title:
+        data['title'] = title
+    if body:
+        data['body'] = body
+    if state:
+        data['state'] = state
+    response = requests.patch(url, json=data, headers=headers)
+    return response.json()
+def create_pull_request(repo_name, title, body, head, base='main'):
+    import requests
+    import os
+
+    # GitHub personal access token
+    token = os.getenv('GH_PAT')
+    headers = {'Authorization': f'token {token}', 'Accept': 'application/vnd.github.v3+json'}
+
+    url = f'https://api.github.com/repos/{repo_name}/pulls'
+    data = {
+        'title': title,
+        'body': body,
+        'head': head,
+        'base': base
+    }
+
+    response = requests.post(url, json=data, headers=headers)
+    return response.json()
+
+
+def list_repos(username):
+    import requests
+    import os
+
+    # GitHub personal access token
+    token = os.getenv('GH_PAT')
+    headers = {'Authorization': f'token {token}', 'Accept': 'application/vnd.github.v3+json'}
+
+    url = f'https://api.github.com/users/{username}/repos'
+    response = requests.get(url, headers=headers)
+    return response.json()
