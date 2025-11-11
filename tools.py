@@ -939,10 +939,10 @@ Work step-by-step and use tools as needed to complete the task successfully."""
 
         except Exception as e:
             return f"Error spawning subagent: {str(e)}"
-def create_pr(repo, title, body='', head='', base='main'):
+def create_pr(title, body='', head='', base='main'):
     import requests
     url = f'https://api.github.com/repos/{repo}/pulls'
-    headers = {'Authorization': f'token YOUR_GITHUB_TOKEN'}
+    headers = {'Authorization': f'token YOUR_ACTUAL_GITHUB_TOKEN'}
     data = {'title': title, 'body': body, 'head': head, 'base': base}
     response = requests.post(url, json=data, headers=headers)
     return response.json()
@@ -951,7 +951,7 @@ def create_pr(repo, title, body='', head='', base='main'):
 def list_issues(repo):
     import requests
     url = f'https://api.github.com/repos/{repo}/issues'
-    headers = {'Authorization': f'token YOUR_GITHUB_TOKEN'}
+    headers = {'Authorization': f'token YOUR_ACTUAL_GITHUB_TOKEN'}
     response = requests.get(url, headers=headers)
     return response.json()
 
@@ -959,7 +959,7 @@ def list_issues(repo):
 def create_issue(repo, title, body='', labels=[]):
     import requests
     url = f'https://api.github.com/repos/{repo}/issues'
-    headers = {'Authorization': f'token YOUR_GITHUB_TOKEN'}
+    headers = {'Authorization': f'token YOUR_ACTUAL_GITHUB_TOKEN'}
     data = {'title': title, 'body': body, 'labels': labels}
     response = requests.post(url, json=data, headers=headers)
     return response.json()
@@ -968,7 +968,7 @@ def create_issue(repo, title, body='', labels=[]):
 def update_issue(repo, issue_number, title=None, body=None, state=None):
     import requests
     url = f'https://api.github.com/repos/{repo}/issues/{issue_number}'
-    headers = {'Authorization': f'token YOUR_GITHUB_TOKEN'}
+    headers = {'Authorization': f'token YOUR_ACTUAL_GITHUB_TOKEN'}
     data = {}
     if title:
         data['title'] = title
