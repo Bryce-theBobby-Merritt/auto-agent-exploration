@@ -1009,3 +1009,21 @@ def list_repos(username):
     url = f'https://api.github.com/users/{username}/repos'
     response = requests.get(url, headers=headers)
     return response.json()
+
+
+def test_github_authentication():
+    import os
+    import requests
+
+    # GitHub personal access token
+    token = os.getenv('GH_PAT')
+    headers = {'Authorization': f'token {token}', 'Accept': 'application/vnd.github.v3+json'}
+
+    # Simple request to check authentication
+    url = 'https://api.github.com/user'
+    response = requests.get(url, headers=headers)
+
+    if response.status_code == 200:
+        return 'Authentication successful!', response.json()
+    else:
+        return 'Authentication failed!', response.status_code, response.json()
