@@ -214,114 +214,70 @@ class ToolGitPushBranch(Tool):
         return await ToolRunCommandInDevContainer(command=command)()
 
 
-class ToolRunBackgroundCommand(Tool):
-    """Run a command in the background within the development container.
-    Use this for long-running processes like servers that shouldn't block the agent.
-    """
+class ToolTmuxCommand(Tool):
+    """Run a command in a tmux session within the development container."""
 
-    command: str = Field(description="The command to run in background")
+    command: str = Field(description="The tmux command to execute")
 
     async def _run(self) -> str:
-        if docker_client is None:
-            return "Error: Docker client not available. Please ensure Docker is running."
+        tmux_command = f"tmux new-session -d -s mysession '{{self.command}}; bash'"
 
         try:
-            # Get the container
-            container = docker_client.containers.get("python-dev")
-        except docker_errors.NotFound:
-            return "Error: Python development container 'python-dev' not found. The container may not have started properly."
-        except Exception as e:
-            return f"Error: Failed to access container: {e}"
-
-        # Check if container is running
-        container.reload()
-        if container.status != "running":
-            return f"Error: Container 'python-dev' is not running (status: {container.status}). Please restart the agent."
-
-        # Run command with nohup and & to ensure it runs in background
-        bg_command = f"nohup {self.command} > /dev/null 2>&1 & echo $!"
-
-        try:
-            result = container.exec_run(["bash", "-c", bg_command])
-            exit_code = result.exit_code
-            output = result.output
-
-            if isinstance(output, bytes):
-                output_str = output.decode("utf-8")
-            elif isinstance(output, tuple) and len(output) >= 2:
-                stdout_bytes, stderr_bytes = output[0], output[1]
-                stdout_str = stdout_bytes.decode("utf-8") if isinstance(stdout_bytes, bytes) else str(stdout_bytes)
-                stderr_str = stderr_bytes.decode("utf-8") if isinstance(stderr_bytes, bytes) else str(stderr_bytes)
-                output_str = stdout_str + stderr_str
-            else:
-                output_str = str(output)
-
-            if exit_code != 0:
-                return f"Failed to start background command with exit code {exit_code}: {output_str}"
-            return f"Background command started successfully. PID: {output_str.strip()}"
+            # Run tmux command
+            result = await ToolRunCommandInDevContainer(command=tmux_command)()
+            return result
 
         except Exception as e:
-            return f"Error starting background command: {e}"
+            return f"Error executing tmux command: {e}"
 
     async def __call__(self) -> str:
         return await self._run()
 
 
-class ToolTmuxCommand(Tool):
-    """Run a command in a tmux session within the development container.
-    Falls back to background execution if tmux is not available.
+class ToolStartFlaskServer(Tool):
+    """Start a Flask server in a new tmux session to prevent thread locking the main agent.
+
+    This tool automatically starts Flask applications in detached tmux sessions,
+    allowing the agent to continue functioning while the server runs in the background.
     """
 
-    command: str = Field(description="The command to execute in tmux or background")
+    app_file: str = Field(description="Path to the Flask app file (e.g., 'app.py')")
+    port: int = Field(default=5000, description="Port number for the Flask server")
+    host: str = Field(default="0.0.0.0", description="Host address for the Flask server")
+    session_name: str = Field(default="flask_server", description="Name for the tmux session")
 
     async def _run(self) -> str:
-        if docker_client is None:
-            return "Error: Docker client not available. Please ensure Docker is running."
+        # Check if tmux session with this name already exists
+        check_session_cmd = f"tmux has-session -t {self.session_name} 2>/dev/null && echo 'exists' || echo 'not_exists'"
+        session_check = await ToolRunCommandInDevContainer(command=check_session_cmd)()
+
+        if "exists" in session_check:
+            return f"Error: tmux session '{self.session_name}' already exists. Please choose a different session name or kill the existing session first."
+
+        # Create the Flask startup command
+        flask_command = f"cd /app && python {self.app_file}"
+
+        # Create tmux command to start Flask server in detached session
+        tmux_command = f"tmux new-session -d -s {self.session_name} '{flask_command}; exec bash'"
 
         try:
-            # Get the container
-            container = docker_client.containers.get("python-dev")
-        except docker_errors.NotFound:
-            return "Error: Python development container 'python-dev' not found. The container may not have started properly."
-        except Exception as e:
-            return f"Error: Failed to access container: {e}"
+            # Execute the tmux command
+            result = await ToolRunCommandInDevContainer(command=tmux_command)()
 
-        # Check if container is running
-        container.reload()
-        if container.status != "running":
-            return f"Error: Container 'python-dev' is not running (status: {container.status}). Please restart the agent."
+            if result.strip():
+                return f"Warning during tmux session creation: {result}\n\nFlask server should be starting in tmux session '{self.session_name}' on {self.host}:{self.port}"
 
-        # First try tmux
-        tmux_command = f"tmux new-session -d -s mysession '{self.command}; bash'"
+            # Verify the session was created
+            verify_cmd = f"tmux list-sessions | grep {self.session_name}"
+            verify_result = await ToolRunCommandInDevContainer(command=verify_cmd)()
 
-        try:
-            result = container.exec_run(["bash", "-c", tmux_command])
-            if result.exit_code == 0:
-                return "Command started in tmux session successfully."
+            if self.session_name in verify_result:
+                return f"✅ Flask server started successfully!\n\n- App file: {self.app_file}\n- Running on: {self.host}:{self.port}\n- tmux session: {self.session_name}\n- Access URL: http://localhost:{self.port}\n\nThe server is running in a detached tmux session and won't block the agent."
             else:
-                # tmux failed, fall back to background execution
-                return await self._run_background()
-        except Exception:
-            # tmux not available, fall back to background execution
-            return await self._run_background()
-
-    async def _run_background(self) -> str:
-        """Fallback method to run command in background when tmux is not available."""
-        bg_command = f"nohup {self.command} > /dev/null 2>&1 & echo $!"
-
-        try:
-            # Get the container (already checked above)
-            container = docker_client.containers.get("python-dev")
-            result = container.exec_run(["bash", "-c", bg_command])
-
-            if result.exit_code == 0:
-                output_str = result.output.decode("utf-8") if isinstance(result.output, bytes) else str(result.output)
-                return f"Command started in background (tmux not available). PID: {output_str.strip()}"
-            else:
-                return f"Failed to start background command: exit code {result.exit_code}"
+                return f"❌ Failed to verify tmux session creation. Server may not have started properly."
 
         except Exception as e:
-            return f"Error starting background command: {e}"
+            return f"Error starting Flask server: {e}\n\nCommand attempted: {tmux_command}"
 
     async def __call__(self) -> str:
         return await self._run()

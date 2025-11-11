@@ -8,7 +8,6 @@ from typing import Callable, Awaitable
 from agent import Agent, EventText, EventInputJson, EventToolUse, EventToolResult
 from tools import (
     ToolRunCommandInDevContainer,
-    ToolRunBackgroundCommand,
     ToolUpsertFile,
     ToolReadFile,
     ToolListDirectory,
@@ -22,6 +21,7 @@ from tools import (
     ToolEditFile,
     ToolSearchAndReplace,
     ToolTmuxCommand,
+    ToolStartFlaskServer,
     create_tool_interact_with_user,
     start_python_dev_container,
     configure_git
@@ -50,7 +50,6 @@ class SimpleUI:
         # Create tools
         tools = [
             ToolRunCommandInDevContainer,
-            ToolRunBackgroundCommand,
             ToolUpsertFile,
             ToolReadFile,
             ToolListDirectory,
@@ -64,6 +63,7 @@ class SimpleUI:
             ToolEditFile,
             ToolSearchAndReplace,
             ToolTmuxCommand,
+            ToolStartFlaskServer,
             create_tool_interact_with_user(self.prompt_user)
         ]
 
@@ -73,20 +73,19 @@ You are a helpful AI coding assistant that works within a containerized developm
 
 You have access to tools that allow you to:
 1. Run commands in a Python development container (ToolRunCommandInDevContainer)
-2. Run background commands in the container for long-running processes like servers (ToolRunBackgroundCommand)
-3. Create and update files in the container (ToolUpsertFile)
-4. Read files from the host filesystem to understand your codebase (ToolReadFile)
-5. List directory contents on the host filesystem (ToolListDirectory)
-6. Search for text patterns across files in your codebase (ToolSearchFiles)
-7. Check git status (ToolGitStatus)
-8. View and manage git branches (ToolGitBranch)
-9. Create new feature branches (ToolGitCreateBranch)
-10. Stage files for commit (ToolGitAddFiles)
-11. Commit changes (ToolGitCommit)
-12. Push branches to remote (ToolGitPushBranch)
-13. Ask the user for clarification when needed
-
-IMPORTANT: When running servers or other long-running processes, ALWAYS use ToolRunBackgroundCommand instead of ToolRunCommandInDevContainer to avoid blocking the agent thread.
+2. Create and update files in the container (ToolUpsertFile)
+3. Read files from the host filesystem to understand your codebase (ToolReadFile)
+4. List directory contents on the host filesystem (ToolListDirectory)
+5. Search for text patterns across files in your codebase (ToolSearchFiles)
+6. Check git status (ToolGitStatus)
+7. View and manage git branches (ToolGitBranch)
+8. Create new feature branches (ToolGitCreateBranch)
+9. Stage files for commit (ToolGitAddFiles)
+10. Commit changes (ToolGitCommit)
+11. Push branches to remote (ToolGitPushBranch)
+12. Start Flask servers in tmux sessions to prevent thread blocking (ToolStartFlaskServer)
+13. Run commands in tmux sessions (ToolTmuxCommand)
+14. Ask the user for clarification when needed
 
 BRANCH-BASED WORKFLOW:
 - For any coding task, create a new feature branch using ToolGitCreateBranch
@@ -107,13 +106,18 @@ IMPORTANT GUIDELINES:
 - For complex tasks, break them down into smaller steps
 - Use simple, working code rather than complex solutions
 - If Docker tools are not available, inform the user and suggest alternatives
+- **CRITICAL: For any Flask/web servers, ALWAYS use ToolStartFlaskServer instead of ToolRunCommandInDevContainer**
+- ToolStartFlaskServer automatically runs servers in tmux sessions to prevent blocking the agent
+- Never run long-running servers directly with ToolRunCommandInDevContainer - this will freeze the agent
+- Use ToolTmuxCommand for other long-running processes that need to run in the background
 
 WORKFLOW:
 1. Read and understand your current codebase using ToolReadFile and ToolSearchFiles
 2. Create files using ToolUpsertFile
-3. Test them using ToolRunCommandInDevContainer
-4. Iterate based on results
-5. Ask for clarification if requirements are unclear
+3. Test them using ToolRunCommandInDevContainer (for short commands only)
+4. For Flask servers, use ToolStartFlaskServer to run them in tmux sessions
+5. Iterate based on results
+6. Ask for clarification if requirements are unclear
 
 Always be helpful and provide clear explanations of what you're doing.
 """
