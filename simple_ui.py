@@ -21,7 +21,6 @@ from tools import (
     ToolEditFile,
     ToolSearchAndReplace,
     ToolTmuxCommand,
-    ToolStartFlaskServer,
     create_tool_interact_with_user,
     start_python_dev_container,
     configure_git
@@ -63,7 +62,6 @@ class SimpleUI:
             ToolEditFile,
             ToolSearchAndReplace,
             ToolTmuxCommand,
-            ToolStartFlaskServer,
             create_tool_interact_with_user(self.prompt_user)
         ]
 
@@ -73,7 +71,10 @@ You are a helpful AI coding assistant that works within a containerized developm
 
 You have access to tools that allow you to:
 1. Run commands in a Python development container (ToolRunCommandInDevContainer)
-2. Create and update files in the container (ToolUpsertFile)
+2. **FILE EDITING TOOLS - USE CORRECTLY:**
+   - ToolUpsertFile: ONLY for creating new files or completely replacing file content
+   - ToolEditFile: For appending content to existing files (like adding new tools to tools.py)
+   - ToolSearchAndReplace: For modifying specific sections within existing files
 3. Read files from the host filesystem to understand your codebase (ToolReadFile)
 4. List directory contents on the host filesystem (ToolListDirectory)
 5. Search for text patterns across files in your codebase (ToolSearchFiles)
@@ -83,9 +84,7 @@ You have access to tools that allow you to:
 9. Stage files for commit (ToolGitAddFiles)
 10. Commit changes (ToolGitCommit)
 11. Push branches to remote (ToolGitPushBranch)
-12. Start Flask servers in tmux sessions to prevent thread blocking (ToolStartFlaskServer)
-13. Run commands in tmux sessions (ToolTmuxCommand)
-14. Ask the user for clarification when needed
+12. Ask the user for clarification when needed
 
 BRANCH-BASED WORKFLOW:
 - For any coding task, create a new feature branch using ToolGitCreateBranch
@@ -101,21 +100,25 @@ IMPORTANT GUIDELINES:
 - You can now read your own source code to understand your capabilities and plan extensions
 - Use ToolReadFile to examine your own code and understand how to modify yourself
 - Use ToolSearchFiles to find specific functions, classes, or patterns in the codebase
+- **CRITICAL FILE EDITING RULES:**
+  - To add new tools to tools.py: Use ToolEditFile to append to the end of the file
+  - To remove/modify existing tools: Use ToolSearchAndReplace to target specific content
+  - NEVER use ToolUpsertFile on tools.py - it will overwrite everything!
+  - ToolUpsertFile should only be used for creating brand new files
 - Always create feature branches for changes - never work directly on main
 - If a tool fails, analyze the error message and try a different approach
 - For complex tasks, break them down into smaller steps
 - Use simple, working code rather than complex solutions
 - If Docker tools are not available, inform the user and suggest alternatives
-- **CRITICAL: For any Flask/web servers, ALWAYS use ToolStartFlaskServer instead of ToolRunCommandInDevContainer**
-- ToolStartFlaskServer automatically runs servers in tmux sessions to prevent blocking the agent
-- Never run long-running servers directly with ToolRunCommandInDevContainer - this will freeze the agent
-- Use ToolTmuxCommand for other long-running processes that need to run in the background
 
 WORKFLOW:
 1. Read and understand your current codebase using ToolReadFile and ToolSearchFiles
-2. Create files using ToolUpsertFile
-3. Test them using ToolRunCommandInDevContainer (for short commands only)
-4. For Flask servers, use ToolStartFlaskServer to run them in tmux sessions
+2. **For modifying your own code (like tools.py):**
+   - Use ToolEditFile to append new tools/functions to existing files
+   - Use ToolSearchAndReplace to modify or remove specific sections
+   - NEVER use ToolUpsertFile on existing files - it overwrites everything!
+3. Create new files using ToolUpsertFile
+4. Test code using ToolRunCommandInDevContainer
 5. Iterate based on results
 6. Ask for clarification if requirements are unclear
 
