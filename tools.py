@@ -939,7 +939,7 @@ Work step-by-step and use tools as needed to complete the task successfully."""
 
         except Exception as e:
             return f"Error spawning subagent: {str(e)}"
-def create_pr(title, body='', head='', base='main'):
+def create_pr(repo, title, body='', head='', base='main'):
     import requests
     url = f'https://api.github.com/repos/{repo}/pulls'
     headers = {'Authorization': f'token YOUR_ACTUAL_GITHUB_TOKEN'}
@@ -1026,77 +1026,66 @@ def test_github_authentication():
     if response.status_code == 200:
         return 'Authentication successful!', response.json()
     else:
-        return 'Authentication failed!', response.status_code, response.json()def implement_command(md_file):
+        return 'Authentication failed!', response.status_code, response.json()
+
+def list_slash_commands():
+    return "/implement <markdown_file>\n/about\n/help"
+
+
+def about_command():
+    return "Simple Agent tools module. Use /help to see available commands."
+
+
+def implement_command(md_file):
     """
-    Process the /implement command with provided markdown file.
-    This function initializes a structured implementation pipeline including:
-    - Opening a new branch
-    - Investigation
-    - Creating plan.md and implementation details.md
+    Initialize implementation scaffolding from a markdown file.
+    Creates plan.md and implementation_details.md in the current directory.
     """
+    from pathlib import Path
 
-    # Step 1: Open a new branch
-    branch_name = f'feature/implement-{md_file.stem}'
-    ToolGitCreateBranch(branch_name)
+    md_path = Path(md_file)
+    if not md_path.exists():
+        return f"Error: file not found: {md_path}"
 
-    # Step 2: Read the markdown file for specifications
-    with open(md_file, 'r') as file:
-        specifications = file.read()
+    try:
+        specifications = md_path.read_text(encoding="utf-8")
+    except Exception as e:
+        return f"Error reading {md_path.name}: {e}"
 
-    # Step 3: Create plan.md
-    with open('plan.md', 'w') as plan_file:
+    with open('plan.md', 'w', encoding='utf-8') as plan_file:
         plan_file.write('## Implementation Plan\n')
         plan_file.write(specifications)
 
-    # Step 4: Create implementation details.md
-    with open('implementation_details.md', 'w') as details_file:
+    with open('implementation_details.md', 'w', encoding='utf-8') as details_file:
         details_file.write('## Implementation Details\n')
         details_file.write('Details of implementation...')
 
-    # Additional steps can be added for investigation and execution
-    return f"/implement command initialized with {md_file.name}"def list_slash_commands():
-    """
-    List available slash commands to the user.
-    """
-    commands = [
-        '/implement Instructs the system to implement a feature based on provided markdown specifications.'
-        # Add more commands here if necessary
-    ]
-    return '\n'.join(commands)def handle_slash_command(command):
-    """
-    Handle incoming slash commands to invoke the appropriate functions.
-    """
-    if command.startswith('/implement'):
-        _, md_file = command.split(' ')
-        return implement_command(md_file)
+    return f"/implement initialized with {md_path.name}"
 
-    # Handle other commands here
-    return "Unknown command"def implement_command(md_file):
+
+def handle_slash_command(command: str):
     """
-    Process the /implement command with provided markdown file.
-    This function initializes a structured implementation pipeline including:
-    - Opening a new branch
-    - Investigation
-    - Creating plan.md and implementation details.md
+    Route a slash command string.
+    Supported:
+      - /implement <markdown_file>
+      - /about
+      - /help
     """
+    if not command:
+        return "Unknown command"
 
-    # Step 1: Open a new branch
-    branch_name = f'feature/implement-{md_file.stem}'
-    ToolGitCreateBranch(branch_name)
+    parts = command.strip().split(maxsplit=1)
+    name = parts[0]
 
-    # Step 2: Read the markdown file for specifications
-    with open(md_file, 'r') as file:
-        specifications = file.read()
+    if name == "/implement":
+        if len(parts) < 2:
+            return "Usage: /implement <markdown_file>"
+        return implement_command(parts[1])
 
-    # Step 3: Create plan.md
-    with open('plan.md', 'w') as plan_file:
-        plan_file.write('## Implementation Plan\n')
-        plan_file.write(specifications)
+    if name in ("/help", "/commands"):
+        return list_slash_commands()
 
-    # Step 4: Create implementation details.md
-    with open('implementation_details.md', 'w') as details_file:
-        details_file.write('## Implementation Details\n')
-        details_file.write('Details of implementation...')
+    if name == "/about":
+        return about_command()
 
-    # Additional steps can be added for investigation and execution
-    return f"/implement command initialized with {md_file.name}"
+    return "Unknown command"
