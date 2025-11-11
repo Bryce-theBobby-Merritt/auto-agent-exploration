@@ -793,6 +793,8 @@ class ToolSpawnSubagent(Tool):
     """
 
     task: str = Field(description="The specific task for the subagent to complete")
+    log_file_path: Optional[str] = Field(default=None, description="Optional path to append subagent logs")
+    log_prefix: Optional[str] = Field(default=None, description="Optional prefix added to each log line")
 
     async def __call__(self) -> str:
         """Spawn a subagent for the given task that runs in the background."""
@@ -800,6 +802,7 @@ class ToolSpawnSubagent(Tool):
             # Import here to avoid circular imports
             from agent import Agent
             import asyncio
+            from datetime import datetime
 
             # Create a focused system prompt for the subagent
             subagent_prompt = f"""You are a specialized subagent tasked with: {self.task}
@@ -875,7 +878,18 @@ Work step-by-step and use tools as needed to complete the task successfully."""
             # Start the subagent in the background
             async def run_subagent():
                 """Run the subagent and handle its events."""
+                def append_log(line: str):
+                    if not self.log_file_path:
+                        return
+                    try:
+                        prefix = (self.log_prefix or "[SUBAGENT]")
+                        timestamp = datetime.utcnow().isoformat() + "Z"
+                        with open(self.log_file_path, "a", encoding="utf-8") as f:
+                            f.write(f"{prefix} {timestamp} {line}\n")
+                    except Exception:
+                        pass
                 try:
+                    append_log("started")
                     text_buffer = ""
                     async for event in subagent.agentic_loop():
                         from agent import EventText, EventToolUse, EventToolResult
@@ -888,48 +902,61 @@ Work step-by-step and use tools as needed to complete the task successfully."""
                                     if line.strip():
                                         try:
                                             print(f"[SUBAGENT] {line}", flush=True)
+                                            append_log(line)
                                         except UnicodeEncodeError:
                                             # Handle encoding issues by replacing problematic characters
                                             safe_line = line.encode('ascii', 'replace').decode('ascii')
                                             print(f"[SUBAGENT] {safe_line}", flush=True)
+                                            append_log(safe_line)
                                 text_buffer = lines[-1]  # Keep incomplete line
                         elif isinstance(event, EventToolUse):
                             # Flush any buffered text first
                             if text_buffer.strip():
                                 try:
                                     print(f"[SUBAGENT] {text_buffer}", flush=True)
+                                    append_log(text_buffer)
                                 except UnicodeEncodeError:
                                     safe_text = text_buffer.encode('ascii', 'replace').decode('ascii')
                                     print(f"[SUBAGENT] {safe_text}", flush=True)
+                                    append_log(safe_text)
                                 text_buffer = ""
                             print(f"[SUBAGENT TOOL] {event.tool.__class__.__name__}", flush=True)
+                            append_log(f"[TOOL] {event.tool.__class__.__name__}")
                         elif isinstance(event, EventToolResult):
                             # Flush any buffered text first
                             if text_buffer.strip():
                                 try:
                                     print(f"[SUBAGENT] {text_buffer}", flush=True)
+                                    append_log(text_buffer)
                                 except UnicodeEncodeError:
                                     safe_text = text_buffer.encode('ascii', 'replace').decode('ascii')
                                     print(f"[SUBAGENT] {safe_text}", flush=True)
+                                    append_log(safe_text)
                                 text_buffer = ""
                             result_preview = event.result[:100] + "..." if len(event.result) > 100 else event.result
                             try:
                                 print(f"[SUBAGENT RESULT] {result_preview}", flush=True)
+                                append_log(f"[RESULT] {result_preview}")
                             except UnicodeEncodeError:
                                 safe_result = result_preview.encode('ascii', 'replace').decode('ascii')
                                 print(f"[SUBAGENT RESULT] {safe_result}", flush=True)
+                                append_log(f"[RESULT] {safe_result}")
 
                     # Flush any remaining buffered text
                     if text_buffer.strip():
                         try:
                             print(f"[SUBAGENT] {text_buffer}", flush=True)
+                            append_log(text_buffer)
                         except UnicodeEncodeError:
                             safe_text = text_buffer.encode('ascii', 'replace').decode('ascii')
                             print(f"[SUBAGENT] {safe_text}", flush=True)
+                            append_log(safe_text)
 
                     print("[SUBAGENT] Task completed successfully.", flush=True)
+                    append_log("completed successfully")
                 except Exception as e:
                     print(f"[SUBAGENT ERROR] {str(e)}", flush=True)
+                    append_log(f"error: {str(e)}")
 
             # Create background task for subagent
             asyncio.create_task(run_subagent())
@@ -978,7 +1005,7 @@ def update_issue(repo, issue_number, title=None, body=None, state=None):
         data['state'] = state
     response = requests.patch(url, json=data, headers=headers)
     return response.json()
-def create_pull_request(repo_name, title, body, head, base='main'):
+def create_pull_request(repo_name, title, body, head, base='main', reviewers=None):(repo_name, title, body, head, base='main'):
     import requests
     import os
 
@@ -1043,10 +1070,12 @@ def docker_status_command(container: str = "python-dev") -> str:
 def implement_command(md_file):
     """
     Initialize implementation scaffolding from a markdown file.
-    Creates plan.md and implementation_details.md in the current directory.
+    Encourages LLM to break the implement task into the first most important task.
+    From the most important task, break it into plan.md individual steps.
+    Execute the steps, and update as needed. Add implementation_details.md to track the progress.
+    Ask the user for clarification if needed.
     """
-    from pathlib import Path
-
+    # Read source markdown and derive a prioritized, actionable plan.
     md_path = Path(md_file)
     if not md_path.exists():
         return f"Error: file not found: {md_path}"
@@ -1056,15 +1085,200 @@ def implement_command(md_file):
     except Exception as e:
         return f"Error reading {md_path.name}: {e}"
 
-    with open('plan.md', 'w', encoding='utf-8') as plan_file:
-        plan_file.write('## Implementation Plan\n')
-        plan_file.write(specifications)
+    # Extract the "most important task" heuristically:
+    # - Prefer the first markdown heading line
+    # - Fallback to the first non-empty line
+    most_important = None
+    for line in specifications.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("#"):
+            # Remove leading '#' and trim
+            most_important = stripped.lstrip("#").strip()
+            break
+        if most_important is None:
+            most_important = stripped
 
-    with open('implementation_details.md', 'w', encoding='utf-8') as details_file:
-        details_file.write('## Implementation Details\n')
-        details_file.write('Details of implementation...')
+    if not most_important:
+        most_important = "Implement requested changes"
 
-    return f"/implement initialized with {md_path.name}"
+    # Derive step list:
+    # - Prefer ordered list lines like "1. ..." or "- ..."/"* ..." as steps
+    steps: list[str] = []
+    for line in specifications.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("1.") or stripped.startswith("- ") or stripped.startswith("* "):
+            # Normalize bullets to plain text
+            if stripped[0].isdigit():
+                # Remove leading enumeration like "1. "
+                parts = stripped.split(".", 1)
+                step_text = parts[1].strip() if len(parts) > 1 else stripped
+            else:
+                step_text = stripped[2:].strip()
+            if step_text:
+                steps.append(step_text)
+
+    # Fallback to a minimal two-step plan if none detected
+    if not steps:
+        steps = [
+            f"Plan work for: {most_important}",
+            "Execute initial setup tasks (git add/commit or simple commands)",
+        ]
+
+    # Write plan.md with derived steps
+    plan_lines = ["## Implementation Plan", "", f"Most Important Task: {most_important}", "", "### Steps:"]
+    for idx, s in enumerate(steps, start=1):
+        plan_lines.append(f"{idx}. {s}")
+    plan_content = "\n".join(plan_lines) + "\n"
+    Path("plan.md").write_text(plan_content, encoding="utf-8")
+
+    # Execute simple, explicit steps and track progress in implementation_details.md.
+    # Supported executable step forms:
+    #   - run: <shell command>        -> executed inside python-dev container
+    #   - write:<path>|<content>      -> write content to a file on host
+    from datetime import datetime
+    results: list[str] = []
+    needs_clarification: list[str] = []
+
+    # Heuristics to treat natural steps as executable without requiring 'run:' or 'write:'
+    # - If a step starts with a common shell command, run it
+    # - If a step looks like "create/write file <path>: <content>" or "<path> | <content>", write it
+    import re
+
+    shell_starters = {
+        "git", "docker", "python", "pip", "pytest", "bash", "sh", "npm", "pnpm", "yarn",
+        "uvicorn", "flask", "make", "curl", "echo", "tmux", "poetry"
+    }
+
+    def _is_shell_like_command(text: str) -> bool:
+        """Return True if the step looks like a shell command that we can execute safely in the dev container."""
+        stripped = text.strip()
+        if not stripped or " " not in stripped:
+            return False
+        first = stripped.split()[0].lower()
+        # Allow 'sudo <cmd>' by checking the next token
+        if first == "sudo" and len(stripped.split()) > 1:
+            first = stripped.split()[1].lower()
+        return first in shell_starters
+
+    def _parse_write_like(text: str) -> tuple[str, str] | tuple[None, None]:
+        """
+        Parse simple 'create/write file' directives embedded in prose.
+        Supported examples:
+          - create file path.txt: hello world
+          - write file path.txt: hello world
+          - create path.txt: hello world
+          - write path.txt: hello world
+          - path.txt | hello world
+        Returns (path, content) or (None, None) if not matched.
+        """
+        t = text.strip()
+        # Pattern 1: (create|write)( file)? <path> [:|] <content>
+        m = re.match(r"^(?:create|write)(?:\s+file)?\s+([^\s:|]+)\s*[:|]\s*(.+)$", t, flags=re.IGNORECASE)
+        if m:
+            return m.group(1).strip(), m.group(2)
+        # Pattern 2: <path> | <content>
+        m = re.match(r"^([^\s:|]+)\s*\|\s*(.+)$", t)
+        if m:
+            return m.group(1).strip(), m.group(2)
+        return None, None
+
+    for idx, step in enumerate(steps, start=1):
+        step_header = f"Step {idx}: {step}"
+
+        # run: <command>
+        if step.lower().startswith("run:"):
+            command = step.split(":", 1)[1].strip()
+            # Execute inside dev container synchronously
+            try:
+                output = ToolRunCommandInDevContainer(command=command)._run()
+                results.append(f"{step_header}\nResult:\n{output.strip()}\n")
+            except Exception as e:
+                results.append(f"{step_header}\nError executing command: {e}\n")
+            continue
+
+        # write:<path>|<content>
+        if step.lower().startswith("write:"):
+            rest = step.split(":", 1)[1]
+            parts = rest.split("|", 1)
+            if len(parts) == 2:
+                target_path = parts[0].strip()
+                content = parts[1]
+                try:
+                    Path(target_path).write_text(content, encoding="utf-8")
+                    results.append(f"{step_header}\nResult: wrote file '{target_path}'\n")
+                except Exception as e:
+                    results.append(f"{step_header}\nError writing file '{target_path}': {e}\n")
+            else:
+                needs_clarification.append(step)
+            continue
+
+        # Heuristic: execute shell-like commands even without 'run:' prefix
+        if _is_shell_like_command(step):
+            try:
+                output = ToolRunCommandInDevContainer(command=step.strip())._run()
+                results.append(f"{step_header}\nResult:\n{output.strip()}\n")
+            except Exception as e:
+                results.append(f"{step_header}\nError executing inferred command: {e}\n")
+            continue
+
+        # Heuristic: parse simple write directives embedded in prose
+        target_path, content = _parse_write_like(step)
+        if target_path and content is not None:
+            try:
+                Path(target_path).write_text(content, encoding="utf-8")
+                results.append(f"{step_header}\nResult: wrote file '{target_path}'\n")
+            except Exception as e:
+                results.append(f"{step_header}\nError writing file '{target_path}': {e}\n")
+            continue
+
+        # Unknown step form -> needs clarification
+        # Try spawning a subagent to reason about and execute this natural-language task
+        try:
+            loop = asyncio.get_running_loop()
+            sub_task = f"""{step}
+
+Context:
+- Most important task: {most_important}
+- Source spec file: {md_path.name}
+"""
+            tool = ToolSpawnSubagent(  # type: ignore[name-defined]
+                task=sub_task,
+                log_file_path="implementation_details.md",
+                log_prefix=f"[SUBAGENT Step {idx}]"
+            )
+            loop.create_task(tool.__call__())  # schedule background spawn without blocking
+            results.append(f"{step_header}\nResult: spawned subagent to execute this task in background (logging to implementation_details.md)\n")
+        except RuntimeError:
+            # No running event loop available; fall back to clarification
+            needs_clarification.append(step)
+
+    # Write implementation_details.md log
+    details_lines = [
+        "## Implementation Details",
+        f"Started: {datetime.utcnow().isoformat()}Z",
+        "",
+        "### Executed Steps",
+    ]
+    if results:
+        details_lines.extend(results)
+    else:
+        details_lines.append("No executable steps detected.\n")
+
+    if needs_clarification:
+        details_lines.append("### Needs Clarification")
+        for s in needs_clarification:
+            details_lines.append(f"- {s}")
+        details_lines.append("")
+        details_lines.append("Please clarify the steps above or reformat as 'run: <cmd>' or 'write:<path>|<content>'.")
+
+    Path("implementation_details.md").write_text("\n".join(details_lines) + "\n", encoding="utf-8")
+
+    # Return concise status
+    executed = len(results)
+    unclear = len(needs_clarification)
+    return f"/implement initialized from {md_path.name} — executed {executed} step(s), {unclear} need clarification"
 
 
 def handle_slash_command(command: str):
@@ -1096,4 +1310,11 @@ def handle_slash_command(command: str):
         container = parts[1] if len(parts) > 1 else "python-dev"
         return docker_status_command(container)
 
-    return "Unknown command"
+    return "Unknown command"    if reviewers:  # Include reviewers if provided
+        data['reviewers'] = reviewers
+        'base': base
+        'reviewers': reviewers
+    }
+    
+    response = requests.post(url, json=data, headers=headers)
+    return response.json()
