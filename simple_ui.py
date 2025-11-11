@@ -174,6 +174,9 @@ Always be helpful and provide clear explanations of what you're doing.
 
                 await self.run_interaction(user_input)
 
+            except EOFError:
+                print("\nInput stream ended. Goodbye!")
+                break
             except KeyboardInterrupt:
                 print("\nGoodbye!")
                 break
